@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Video Vault</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-card: #252525;
+            --text-primary: #ffffff;
+            --text-secondary: #aaaaaa;
+            --accent: #e50914;
+            --accent-hover: #f40612;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+
+        /* --- LOGIN SCREEN --- */
+        #loginScreen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 1000; transition: opacity 0.5s ease;
+        }
+        .login-box {
+            background: var(--bg-secondary); padding: 40px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 400px;
+        }
+        .login-box h1 { margin-bottom: 10px; font-size: 24px; }
+        .login-box p { color: var(--text-secondary); margin-bottom: 25px; font-size: 14px; }
+        .login-box input {
+            width: 100%; padding: 12px 15px; border: 1px solid #444; background: #333;
+            color: white; border-radius: 6px; font-size: 16px; margin-bottom: 15px; outline: none; transition: border 0.3s;
+        }
+        .login-box input:focus { border-color: var(--accent); }
+        .login-box button {
+            width: 100%; padding: 12px; background: var(--accent); color: white; border: none;
+            border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s;
+        }
+        .login-box button:hover { background: var(--accent-hover); }
+        .error-msg { color: var(--accent); font-size: 14px; margin-top: 10px; display: none; }
+
+        /* --- MAIN CONTENT --- */
+        #mainContent { display: none; opacity: 0; transition: opacity 0.5s ease; }
+        header {
+            background: rgba(15, 15, 15, 0.95); backdrop-filter: blur(10px); padding: 15px 30px;
+            position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #333;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        header h2 { font-size: 20px; letter-spacing: 1px; }
+        header h2 span { color: var(--accent); }
+        .logout-btn {
+            background: transparent; border: 1px solid #555; color: var(--text-secondary);
+            padding: 8px 16px; border-radius: 4px; cursor: pointer; transition: all 0.3s;
+        }
+        .logout-btn:hover { border-color: var(--accent); color: white; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .section-title { font-size: 22px; margin-bottom: 20px; font-weight: 600; }
+
+        /* --- VIDEO GRID --- */
+        .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; }
+        .video-card {
+            background: var(--bg-card); border-radius: 8px; overflow: hidden; cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .video-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        .thumb-container { position: relative; width: 100%; padding-top: 56.25%; background: #000; overflow: hidden; }
+        .thumb-container img {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; transition: transform 0.3s;
+        }
+        .video-card:hover .thumb-container img { transform: scale(1.05); }
+        .play-icon {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 50px; height: 50px; background: rgba(229, 9, 20, 0.8); border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s;
+        }
+        .video-card:hover .play-icon { opacity: 1; }
+        .play-icon::after {
+            content: ''; display: block; width: 0; height: 0; border-style: solid;
+            border-width: 8px 0 8px 14px; border-color: transparent transparent transparent #ffffff; margin-left: 4px;
+        }
+        .video-info { padding: 15px; }
+        .video-info h3 { font-size: 16px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .video-info p { font-size: 13px; color: var(--text-secondary); }
+        
+        /* Badge untuk GDrive */
+        .badge {
+            display: inline-block; background: #4285F4; color: white; font-size: 10px; 
+            padding: 2px 6px; border-radius: 3px; margin-left: 8px; vertical-align: middle;
+        }
+
+        /* --- VIDEO MODAL --- */
+        #videoModal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); z-index: 2000; justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-content { width: 90%; max-width: 1000px; position: relative; }
+        .close-modal {
+            position: absolute; top: -40px; right: 0; background: none; border: none;
+            color: white; font-size: 30px; cursor: pointer; z-index: 10;
+        }
+        #mainPlayer { width: 100%; border-radius: 8px; background: #000; max-height: 80vh; display: none; }
+        #gdrivePlayer { 
+            width: 100%; aspect-ratio: 16/9; border: none; border-radius: 8px; 
+            background: #000; display: none; 
+        }
+
+        @media (max-width: 600px) {
+            .video-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+            .container { padding: 15px; } header { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen">
+        <div class="login-box">
+            <h1>🔒 Video Vault</h1>
+            <p>Masukkan password untuk mengakses koleksi video pribadi Anda.</p>
+            <input type="password" id="passwordInput" placeholder="Password..." onkeypress="if(event.key==='Enter') checkLogin()">
+            <button onclick="checkLogin()">Masuk</button>
+            <p class="error-msg" id="errorMsg">Password salah! Coba lagi.</p>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="mainContent">
+        <header>
+            <h2>My <span>Video</span> Vault</h2>
+            <button class="logout-btn" onclick="logout()">Keluar</button>
+        </header>
+
+        <div class="container">
+            <h2 class="section-title">Koleksi Video</h2>
+            <div class="video-grid" id="videoGrid"></div>
+        </div>
+    </div>
+
+    <!-- VIDEO PLAYER MODAL -->
+    <div id="videoModal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <video id="mainPlayer" controls autoplay></video>
+            <iframe id="gdrivePlayer" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // KONFIGURASI PASSWORD & DATA VIDEO
+        // ==========================================
+        const MY_PASSWORD = "admin123"; 
+
+        // DAFTAR VIDEO
+        const videoList = [
+            // --- CONTOH VIDEO LOKAL (MP4) ---
+            {
+                title: "Video Lokal (MP4)",
+                category: "Penyimpanan Lokal",
+                thumb: "https://picsum.photos/seed/local1/400/225", // Gambar lokal/placeholder
+                src: "video/liburan.mp4", // Path file lokal
+                type: "local"
+            },
+            
+            // --- CONTOH VIDEO GOOGLE DRIVE ---
+            // CARA MENDAPATKAN ID & LINK:
+            // 1. Buka Google Drive, klik kanan file video -> "Bagikan" (Share) -> Ubah ke "Siapa pun yang memiliki link"
+            // 2. Klik "Salin Link". Contoh link: https://drive.google.com/file/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/view?usp=sharing
+            // 3. ID File adalah bagian tengah: 1aBcDeFgHiJkLmNoPqRsTuVwXyZ
+            // 4. Masukkan ID tersebut ke dalam format di bawah ini:
+            {
+                title: "Film Favorit (GDrive)",
+                category: "Cloud Storage",
+                // Thumbnail otomatis diambil dari Google Drive menggunakan ID File
+                thumb: "https://drive.google.com/thumbnail?id=1aBcDeFgHiJkLmNoPqRsTuVwXyZ&sz=w1000", 
+                // Link preview/embed Google Drive
+                src: "https://drive.google.com/file/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ/preview", 
+                type: "gdrive"
+            },
+            {
+                title: "Tutorial Coding (GDrive)",
+                category: "Cloud Storage",
+                thumb: "https://drive.google.com/thumbnail?id=GANTI_DENGAN_ID_FILE_KEDUA&sz=w1000",
+                src: "https://drive.google.com/file/d/GANTI_DENGAN_ID_FILE_KEDUA/preview",
+                type: "gdrive"
+            }
+            // Tambahkan video lain di sini...
+        ];
+
+        // ==========================================
+        // LOGIKA APLIKASI
+        // ==========================================
+
+        function checkLogin() {
+            const input = document.getElementById('passwordInput').value;
+            const errorMsg = document.getElementById('errorMsg');
+            if (input === MY_PASSWORD) {
+                document.getElementById('loginScreen').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('loginScreen').style.display = 'none';
+                    const main = document.getElementById('mainContent');
+                    main.style.display = 'block';
+                    setTimeout(() => main.style.opacity = '1', 50);
+                    renderVideos();
+                }, 500);
+            } else {
+                errorMsg.style.display = 'block';
+                document.getElementById('passwordInput').value = '';
+            }
+        }
+
+        function logout() {
+            closeModal(); // Pastikan video berhenti saat logout
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('loginScreen').style.opacity = '1';
+            document.getElementById('passwordInput').value = '';
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+
+        function renderVideos() {
+            const grid = document.getElementById('videoGrid');
+            grid.innerHTML = '';
+
+            videoList.forEach((video) => {
+                const card = document.createElement('div');
+                card.className = 'video-card';
+                card.onclick = () => playVideo(video);
+                
+                const badge = video.type === 'gdrive' ? '<span class="badge">GDRIVE</span>' : '';
+
+                card.innerHTML = `
+                    <div class="thumb-container">
+                        <img src="${video.thumb}" alt="${video.title}" onerror="this.src='https://via.placeholder.com/400x225/333/999?text=No+Thumbnail'">
+                        <div class="play-icon"></div>
+                    </div>
+                    <div class="video-info">
+                        <h3>${video.title} ${badge}</h3>
+                        <p>${video.category}</p>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function playVideo(videoData) {
+            const modal = document.getElementById('videoModal');
+            const localPlayer = document.getElementById('mainPlayer');
+            const gdrivePlayer = document.getElementById('gdrivePlayer');
+
+            // Reset kedua player
+            localPlayer.style.display = 'none';
+            localPlayer.pause();
+            localPlayer.src = "";
+            
+            gdrivePlayer.style.display = 'none';
+            gdrivePlayer.src = "";
+
+            if (videoData.type === 'gdrive') {
+                // Putar via Iframe Google Drive
+                gdrivePlayer.style.display = 'block';
+                gdrivePlayer.src = videoData.src;
+            } else {
+                // Putar via Tag Video Lokal
+                localPlayer.style.display = 'block';
+                localPlayer.src = videoData.src;
+                localPlayer.play().catch(e => console.log("Autoplay diblokir browser"));
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('videoModal');
+            const localPlayer = document.getElementById('mainPlayer');
+            const gdrivePlayer = document.getElementById('gdrivePlayer');
+
+            localPlayer.pause();
+            localPlayer.src = "";
+            localPlayer.style.display = 'none';
+
+            gdrivePlayer.src = ""; // Menghentikan streaming GDrive
+            gdrivePlayer.style.display = 'none';
+
+            modal.style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('videoModal');
+            if (event.target === modal) closeModal();
+        }
+    </script>
+</body>
+</html>
