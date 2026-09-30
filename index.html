@@ -1,108 +1,351 @@
-/**
- * SCRIPT PENGAMBIL LINK VIDEO GOOGLE DRIVE OTOMATIS
- * 
- * Cara Pakai:
- * 1. Isi FOLDER_ID dengan ID folder Google Drive Anda
- * 2. Isi SHEET_NAME dengan nama Google Sheet tujuan
- * 3. Jalankan fungsi scanVideoFolder()
- */
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Video Vault</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f; --bg-secondary: #1a1a1a; --bg-card: #252525;
+            --text-primary: #ffffff; --text-secondary: #aaaaaa;
+            --accent: #e50914; --accent-hover: #f40612;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
 
-// ====== KONFIGURASI - GANTI BAGIAN INI ======
-const FOLDER_ID = "1Uf__AjSMlVbi-n9Qek8yde7MwBwlG22Z_BXaFwq5ckY"; // ID folder Google Drive
-const SHEET_NAME = "Database Video"; // Nama Google Sheet (akan dibuat otomatis jika belum ada)
-const SCAN_SUBFOLDER = true; // true = scan juga isi subfolder, false = hanya folder utama saja
-const VIDEO_EXTENSIONS = ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv", "m4v", "3gp", "ts"]; // Format video yang di-scan
-// ============================================
+        /* --- LOGIN SCREEN --- */
+        #loginScreen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 1000; transition: opacity 0.5s ease;
+        }
+        .login-box {
+            background: var(--bg-secondary); padding: 40px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 400px;
+        }
+        .login-box h1 { margin-bottom: 10px; font-size: 24px; }
+        .login-box p { color: var(--text-secondary); margin-bottom: 25px; font-size: 14px; }
+        .login-box input {
+            width: 100%; padding: 12px 15px; border: 1px solid #444; background: #333;
+            color: white; border-radius: 6px; font-size: 16px; margin-bottom: 15px; outline: none;
+        }
+        .login-box button {
+            width: 100%; padding: 12px; background: var(--accent); color: white; border: none;
+            border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer;
+        }
+        .error-msg { color: var(--accent); font-size: 14px; margin-top: 10px; display: none; }
 
-function scanVideoFolder() {
-  const folder = DriveApp.getFolderById(FOLDER_ID);
-  const sheet = getOrCreateSheet(SHEET_NAME);
-  
-  // Header
-  sheet.clear();
-  sheet.getRange(1, 1, 1, 4).setValues([["Judul", "Link Video", "Kategori", "Folder"]]);
-  sheet.getRange(1, 1, 1, 4).setFontWeight("bold").setBackground("#4285F4").setFontColor("white");
-  
-  const videos = [];
-  scanFolder(folder, folder.getName(), videos);
-  
-  if (videos.length === 0) {
-    SpreadsheetApp.getUi().alert("Tidak ada video ditemukan di folder ini.");
-    return;
-  }
-  
-  // Tulis ke sheet
-  const data = videos.map(v => [v.title, v.link, v.category, v.folder]);
-  sheet.getRange(2, 1, data.length, 4).setValues(data);
-  
-  // Auto-resize kolom
-  sheet.autoResizeColumns(1, 4);
-  
-  // Tampilkan hasil
-  const sheetUrl = sheet.getParent().getUrl();
-  SpreadsheetApp.getUi().alert(
-    `✅ BERHASIL!\n\n` +
-    `Ditemukan ${videos.length} video.\n\n` +
-    `Data sudah ditulis ke Google Sheet:\n${sheetUrl}\n\n` +
-    `Langkah selanjutnya:\n` +
-    `1. Buka Sheet tersebut\n` +
-    `2. File > Share > Publish to web > pilih CSV > Publish\n` +
-    `3. Salin link CSV dan tempel ke website Anda`
-  );
-}
+        /* --- MAIN CONTENT --- */
+        #mainContent { display: none; opacity: 0; transition: opacity 0.5s ease; }
+        header {
+            background: rgba(15, 15, 15, 0.95); backdrop-filter: blur(10px); padding: 15px 30px;
+            position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #333;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        header h2 { font-size: 20px; letter-spacing: 1px; }
+        header h2 span { color: var(--accent); }
+        .logout-btn {
+            background: transparent; border: 1px solid #555; color: var(--text-secondary);
+            padding: 8px 16px; border-radius: 4px; cursor: pointer;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 30px; }
+        .section-title { font-size: 22px; margin-bottom: 20px; font-weight: 600; }
 
-function scanFolder(folder, category, result) {
-  // Scan file video di folder ini
-  const files = folder.getFiles();
-  while (files.hasNext()) {
-    const file = files.next();
-    const name = file.getName();
-    const ext = name.split('.').pop().toLowerCase();
-    
-    if (VIDEO_EXTENSIONS.includes(ext)) {
-      result.push({
-        title: name.replace(/\.[^/.]+$/, ""), // Hapus ekstensi dari judul
-        link: file.getId(), // Cukup ID saja, website akan otomatis format
-        category: category,
-        folder: folder.getName()
-      });
-    }
-  }
-  
-  // Scan subfolder jika diaktifkan
-  if (SCAN_SUBFOLDER) {
-    const subfolders = folder.getFolders();
-    while (subfolders.hasNext()) {
-      const sub = subfolders.next();
-      scanFolder(sub, category + " / " + sub.getName(), result);
-    }
-  }
-}
+        /* --- LOADING SPINNER --- */
+        .loader-container { text-align: center; padding: 50px; color: var(--text-secondary); }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.1); border-left-color: var(--accent);
+            border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;
+            margin: 0 auto 15px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-function getOrCreateSheet(name) {
-  const files = DriveApp.getFilesByName(name);
-  let ss;
-  
-  if (files.hasNext()) {
-    ss = SpreadsheetApp.open(files.next());
-  } else {
-    ss = SpreadsheetApp.create(name);
-    // Pindahkan ke folder yang sama dengan video (opsional)
-    try {
-      const folder = DriveApp.getFolderById(FOLDER_ID);
-      const file = DriveApp.getFileById(ss.getId());
-      folder.addFile(file);
-      DriveApp.getRootFolder().removeFile(file);
-    } catch(e) {}
-  }
-  
-  return ss.getSheets()[0];
-}
+        /* --- VIDEO GRID --- */
+        .video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 25px; }
+        .video-card {
+            background: var(--bg-card); border-radius: 8px; overflow: hidden; cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .video-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.4); }
+        .thumb-container { position: relative; width: 100%; padding-top: 56.25%; background: #000; overflow: hidden; }
+        .thumb-container img {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; transition: transform 0.3s;
+        }
+        .video-card:hover .thumb-container img { transform: scale(1.05); }
+        .play-icon {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 50px; height: 50px; background: rgba(229, 9, 20, 0.8); border-radius: 50%;
+            display: flex; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s;
+        }
+        .video-card:hover .play-icon { opacity: 1; }
+        .play-icon::after {
+            content: ''; display: block; width: 0; height: 0; border-style: solid;
+            border-width: 8px 0 8px 14px; border-color: transparent transparent transparent #ffffff; margin-left: 4px;
+        }
+        .video-info { padding: 15px; }
+        .video-info h3 { font-size: 16px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .video-info p { font-size: 13px; color: var(--text-secondary); }
 
-// Menu kustom di Google Sheet (bonus)
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('🎬 Video Tools')
-    .addItem('Scan Video dari Drive', 'scanVideoFolder')
-    .addToUi();
-}
+        /* --- VIDEO MODAL --- */
+        #videoModal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9); z-index: 2000; justify-content: center; align-items: center;
+        }
+        .modal-content { width: 90%; max-width: 1000px; position: relative; }
+        .close-modal {
+            position: absolute; top: -40px; right: 0; background: none; border: none;
+            color: white; font-size: 30px; cursor: pointer; z-index: 10;
+        }
+        #gdrivePlayer { width: 100%; aspect-ratio: 16/9; border: none; border-radius: 8px; background: #000; }
+        #localPlayer { width: 100%; border-radius: 8px; background: #000; max-height: 80vh; display: none; }
+
+        @media (max-width: 600px) {
+            .video-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+            .container { padding: 15px; } header { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen">
+        <div class="login-box">
+            <h1>🔒 Video Vault</h1>
+            <p>Masukkan password untuk mengakses koleksi video pribadi Anda.</p>
+            <input type="password" id="passwordInput" placeholder="Password..." onkeypress="if(event.key==='Enter') checkLogin()">
+            <button onclick="checkLogin()">Masuk</button>
+            <p class="error-msg" id="errorMsg">Password salah! Coba lagi.</p>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="mainContent">
+        <header>
+            <h2>My <span>Video</span> Vault</h2>
+            <button class="logout-btn" onclick="logout()">Keluar</button>
+        </header>
+
+        <div class="container">
+            <h2 class="section-title">Koleksi Video</h2>
+            <div id="videoGrid" class="video-grid">
+                <!-- Loading state -->
+                <div class="loader-container" id="loader">
+                    <div class="spinner"></div>
+                    <p>Memuat daftar video dari cloud...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIDEO PLAYER MODAL -->
+    <div id="videoModal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+            <iframe id="gdrivePlayer" allowfullscreen allow="autoplay; encrypted-media" style="display:none;"></iframe>
+            <video id="localPlayer" controls autoplay></video>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // KONFIGURASI UTAMA
+        // ==========================================
+        
+        // 1. Ganti dengan password Anda
+        const MY_PASSWORD = "admin123"; 
+
+        // 2. Ganti dengan Link CSV Google Sheet Anda
+        // Contoh: "https://docs.google.com/spreadsheets/d/e/2PACX-....../pub?output=csv"
+        const SHEET_CSV_URL = "2PACX-1vTKGYplEqs3ROsl1xs6Dwr8J4_9uVCdFQV-jdpWw7RVhW1Jmt5yPPBKVAGI35n8FRgaMFlUD4OK5Lpe";
+
+        // ==========================================
+        // LOGIKA APLIKASI
+        // ==========================================
+
+        function checkLogin() {
+            const input = document.getElementById('passwordInput').value;
+            if (input === MY_PASSWORD) {
+                document.getElementById('loginScreen').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('loginScreen').style.display = 'none';
+                    const main = document.getElementById('mainContent');
+                    main.style.display = 'block';
+                    setTimeout(() => main.style.opacity = '1', 50);
+                    fetchAndRenderVideos(); // Muat data dari Sheet
+                }, 500);
+            } else {
+                document.getElementById('errorMsg').style.display = 'block';
+                document.getElementById('passwordInput').value = '';
+            }
+        }
+
+        function logout() {
+            closeModal();
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('loginScreen').style.opacity = '1';
+            document.getElementById('passwordInput').value = '';
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+
+        // Fungsi untuk mengambil data dari Google Sheet
+        async function fetchAndRenderVideos() {
+            const grid = document.getElementById('videoGrid');
+            
+            try {
+                const response = await fetch(SHEET_CSV_URL);
+                if (!response.ok) throw new Error("Gagal memuat data. Pastikan link CSV benar dan Sheet sudah dipublikasikan.");
+                
+                const csvText = await response.text();
+                const rows = parseCSV(csvText);
+                
+                // Hapus header (baris pertama)
+                const dataRows = rows.slice(1); 
+                
+                grid.innerHTML = ''; // Hapus loading spinner
+
+                if (dataRows.length === 0) {
+                    grid.innerHTML = '<p style="color:var(--text-secondary)">Belum ada video di database.</p>';
+                    return;
+                }
+
+                dataRows.forEach(row => {
+                    if (row.length >= 3) {
+                        const title = row[0].trim();
+                        const rawLink = row[1].trim();
+                        const category = row[2].trim();
+                        
+                        // Deteksi apakah ini GDrive atau Lokal
+                        const type = detectType(rawLink);
+                        const id = extractGDriveId(rawLink);
+
+                        if (!id && type === 'gdrive') return; // Skip jika ID tidak valid
+
+                        const thumb = type === 'gdrive' 
+                            ? `https://drive.google.com/thumbnail?id=${id}&sz=w1000` 
+                            : 'https://via.placeholder.com/400x225/333/999?text=Local+Video';
+                            
+                        const src = type === 'gdrive' 
+                            ? `https://drive.google.com/file/d/${id}/preview` 
+                            : rawLink;
+
+                        renderCard(title, category, thumb, src, type);
+                    }
+                });
+
+            } catch (error) {
+                grid.innerHTML = `<p style="color:var(--accent); text-align:center; grid-column:1/-1;">Error: ${error.message}</p>`;
+            }
+        }
+
+        function renderCard(title, category, thumb, src, type) {
+            const grid = document.getElementById('videoGrid');
+            const card = document.createElement('div');
+            card.className = 'video-card';
+            card.onclick = () => playVideo(src, type);
+            
+            card.innerHTML = `
+                <div class="thumb-container">
+                    <img src="${thumb}" alt="${title}" onerror="this.src='https://via.placeholder.com/400x225/333/999?text=No+Thumbnail'">
+                    <div class="play-icon"></div>
+                </div>
+                <div class="video-info">
+                    <h3>${title}</h3>
+                    <p>${category}</p>
+                </div>
+            `;
+            grid.appendChild(card);
+        }
+
+        function playVideo(src, type) {
+            const modal = document.getElementById('videoModal');
+            const gdrivePlayer = document.getElementById('gdrivePlayer');
+            const localPlayer = document.getElementById('localPlayer');
+
+            gdrivePlayer.style.display = 'none'; gdrivePlayer.src = "";
+            localPlayer.style.display = 'none'; localPlayer.pause(); localPlayer.src = "";
+
+            if (type === 'gdrive') {
+                gdrivePlayer.style.display = 'block';
+                gdrivePlayer.src = src;
+            } else {
+                localPlayer.style.display = 'block';
+                localPlayer.src = src;
+                localPlayer.play().catch(() => {});
+            }
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('videoModal');
+            document.getElementById('gdrivePlayer').src = "";
+            const local = document.getElementById('localPlayer');
+            local.pause(); local.src = "";
+            modal.style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            if (event.target === document.getElementById('videoModal')) closeModal();
+        }
+
+        // ==========================================
+        // HELPER FUNCTIONS
+        // ==========================================
+
+        // Deteksi tipe sumber video
+        function detectType(src) {
+            if (src.includes('drive.google.com') || /^[a-zA-Z0-9_-]{20,}$/.test(src)) {
+                return 'gdrive';
+            }
+            return 'local';
+        }
+
+        // Ekstrak ID dari link Google Drive
+        function extractGDriveId(input) {
+            if (!input) return null;
+            if (!input.includes('/') && !input.includes('http')) return input; // Jika murni ID
+            
+            let match = input.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (match) return match[1];
+            
+            match = input.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (match) return match[1];
+            
+            return null;
+        }
+
+        // Parser CSV sederhana untuk menangani teks berkoma
+        function parseCSV(text) {
+            const rows = [];
+            let currentRow = [];
+            let currentField = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const nextChar = text[i+1];
+                
+                if (inQuotes) {
+                    if (char === '"' && nextChar === '"') { currentField += '"'; i++; } 
+                    else if (char === '"') { inQuotes = false; } 
+                    else { currentField += char; }
+                } else {
+                    if (char === '"') { inQuotes = true; } 
+                    else if (char === ',') { currentRow.push(currentField); currentField = ''; } 
+                    else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+                        currentRow.push(currentField);
+                        rows.push(currentRow);
+                        currentRow = []; currentField = '';
+                        if (char === '\r') i++;
+                    } else { currentField += char; }
+                }
+            }
+            currentRow.push(currentField);
+            if (currentField !== '' || currentRow.length > 1) rows.push(currentRow);
+            return rows;
+        }
+    </script>
+</body>
+</html>
